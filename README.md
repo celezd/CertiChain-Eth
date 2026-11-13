@@ -4,7 +4,7 @@ Proyecto Final del curso Introducción a Ethereum y Solidity - ETH Kipu
 
 Integrantes: María Celeste Dominguez
 
-**Demo:** [https://celezd.github.io/CertiChain-Eth/]
+**Demo:** https://celezd.github.io/CertiChain-Eth/
 Para verificar un certificado, subí el archivo `Certificado_de_prueba.pdf` (incluido en este repositorio) en el bloque "Verificar un certificado".
 
 ## ¿Qué problema resuelve?
