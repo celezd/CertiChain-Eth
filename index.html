@@ -70,8 +70,6 @@
     <div id="issueHash" class="mono hint">Hash: (elegí un archivo)</div>
     <label for="issueRecipient">Dirección de la wallet del titular</label>
     <input type="text" id="issueRecipient" placeholder="0x...">
-    <label for="issueURI">Enlace a los metadatos (opcional, ej. ipfs://...)</label>
-    <input type="text" id="issueURI" placeholder="ipfs://...">
     <button id="btnIssue">Emitir certificado</button>
     <div id="msgIssue" class="msg"></div>
   </section>
@@ -207,7 +205,7 @@ async function issue() {
     const hash = await hashFile(file);
     const c = new ethers.Contract(getAddress(), ABI, signer);
     show("msgIssue", "info", "Confirmá la transacción en tu wallet…");
-    const tx = await c.issueCertificate(hash, recipient, $("issueURI").value.trim());
+    const tx = await c.issueCertificate(hash, recipient, "");
     show("msgIssue", "info", "Transacción enviada, esperando confirmación…\n" + tx.hash);
     await tx.wait();
     show("msgIssue", "ok", "✓ Certificado emitido.\nHash: " + hash + "\nTransacción: https://sepolia.etherscan.io/tx/" + tx.hash);
