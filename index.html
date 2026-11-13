@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CertiChain – Certificados verificables en Ethereum</title>
+<style>
+  :root { --bg:#f5f6fa; --card:#fff; --text:#1c1f2a; --muted:#6b7080; --accent:#4b5fd6; --ok:#1a7f4b; --bad:#c0392b; --border:#dde0ea; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Arial, Helvetica, sans-serif; background:var(--bg); color:var(--text); }
+  header { background:var(--accent); color:#fff; padding:20px; text-align:center; }
+  header h1 { margin:0 0 4px; font-size:24px; }
+  header p { margin:0; opacity:.9; font-size:14px; }
+  main { max-width:720px; margin:20px auto; padding:0 16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px; margin-bottom:16px; }
+  h2 { margin:0 0 12px; font-size:18px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  input[type=text], input[type=file] { width:100%; padding:9px; border:1px solid var(--border); border-radius:6px; font-size:14px; font-family:inherit; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:10px 16px; font-size:14px; cursor:pointer; margin-top:14px; }
+  button.secondary { background:#fff; color:var(--accent); border:1px solid var(--accent); margin-top:0; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .mono { font-family:"Courier New", monospace; font-size:12px; word-break:break-all; }
+  .msg { margin-top:14px; padding:10px 12px; border-radius:6px; font-size:14px; display:none; word-break:break-word; }
+  .msg.ok { display:block; background:#e6f5ec; color:var(--ok); }
+  .msg.bad { display:block; background:#fbeaea; color:var(--bad); }
+  .msg.info { display:block; background:#eef0fb; color:var(--accent); }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:10px 0 30px; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CertiChain</h1>
+  <p>Registro y verificación de certificados académicos en Ethereum (Sepolia)</p>
+</header>
+
+<main>
+
+  <!-- Conexión y configuración -->
+  <section class="card">
+    <h2>1. Conexión</h2>
+    <div class="row">
+      <button id="btnConnect" class="secondary">Conectar wallet</button>
+      <span id="walletInfo" class="mono">Sin conectar (para verificar no hace falta wallet)</span>
+    </div>
+    <label for="contractAddress">Dirección del contrato (CertificateRegistry en Sepolia)</label>
+    <input type="text" id="contractAddress" placeholder="0x...">
+    <div id="msgConnect" class="msg"></div>
+  </section>
+
+  <!-- Verificar -->
+  <section class="card">
+    <h2>2. Verificar un certificado</h2>
+    <label for="verifyFile">Archivo del certificado (PDF, imagen, etc.)</label>
+    <input type="file" id="verifyFile">
+    <label for="verifyHash">…o pegá directamente el hash (0x + 64 caracteres)</label>
+    <input type="text" id="verifyHash" placeholder="0x...">
+    <button id="btnVerify">Verificar</button>
+    <div id="msgVerify" class="msg"></div>
+  </section>
+
+  <!-- Emitir -->
+  <section class="card">
+    <h2>3. Emitir un certificado <small style="color:var(--muted)">(solo cuentas emisoras)</small></h2>
+    <label for="issueFile">Archivo del certificado</label>
+    <input type="file" id="issueFile">
+    <div id="issueHash" class="mono hint">Hash: (elegí un archivo)</div>
+    <label for="issueRecipient">Dirección de la wallet del titular</label>
+    <input type="text" id="issueRecipient" placeholder="0x...">
+    <label for="issueURI">Enlace a los metadatos (opcional, ej. ipfs://...)</label>
+    <input type="text" id="issueURI" placeholder="ipfs://...">
+    <button id="btnIssue">Emitir certificado</button>
+    <div id="msgIssue" class="msg"></div>
+  </section>
+
+  <!-- Revocar -->
+  <section class="card">
+    <h2>4. Revocar un certificado <small style="color:var(--muted)">(emisor original o administrador)</small></h2>
+    <label for="revokeFile">Archivo del certificado</label>
+    <input type="file" id="revokeFile">
+    <label for="revokeHash">…o pegá el hash</label>
+    <input type="text" id="revokeHash" placeholder="0x...">
+    <button id="btnRevoke">Revocar</button>
+    <div id="msgRevoke" class="msg"></div>
+  </section>
+
+  <footer>
+    Proyecto Final – Curso de Ethereum y Solidity. El archivo nunca se sube: el hash se calcula en tu navegador y solo el hash va a la blockchain.
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<script>
+// ====== CONFIGURACIÓN (editar después de desplegar) ======
+const CONTRACT_ADDRESS = "0xe37D15d043d698795540aCE69206bBb7C7a86d65";   // ej: "0x1234...abcd"
+const SEPOLIA_CHAIN_ID = 11155111n;
+const SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com"; // lectura sin wallet
+// =========================================================
+
+// ABI mínimo (solo lo que usa la interfaz)
+const ABI = [
+  "function issueCertificate(bytes32 certHash, address recipient, string metadataURI)",
+  "function revokeCertificate(bytes32 certHash)",
+  "function verifyCertificate(bytes32 certHash) view returns (bool exists, bool valid, address issuer, address recipient, uint64 issuedAt)"
+];
+
+let signer = null;   // se completa al conectar la wallet
+let account = null;
+
+const $ = (id) => document.getElementById(id);
+$("contractAddress").value = CONTRACT_ADDRESS;
+
+function show(id, type, text) {
+  const el = $(id);
+  el.className = "msg " + type;
+  el.textContent = text;
+}
+
+// Calcula el hash keccak256 de un archivo, en el navegador
+async function hashFile(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return ethers.keccak256(bytes);
+}
+
+function isHash(v) { return /^0x[0-9a-fA-F]{64}$/.test(v); }
+
+// Obtiene el hash desde el archivo (prioridad) o desde el campo de texto
+async function getHash(fileId, hashId) {
+  const file = $(fileId).files[0];
+  if (file) return hashFile(file);
+  const txt = $(hashId).value.trim();
+  if (!isHash(txt)) throw new Error("Elegí un archivo o pegá un hash válido (0x + 64 caracteres).");
+  return txt;
+}
+
+function getAddress() {
+  const a = $("contractAddress").value.trim();
+  if (!ethers.isAddress(a)) throw new Error("Ingresá una dirección de contrato válida.");
+  return a;
+}
+
+// Mensaje de error legible (incluye el motivo del revert si existe)
+function errText(e) {
+  if (e.code === "ACTION_REJECTED") return "Rechazaste la transacción en la wallet.";
+  const reason = e.reason || (e.info && e.info.error && e.info.error.message) || e.shortMessage || e.message;
+  return String(reason);
+}
+
+// ---- Conectar wallet ----
+async function connect() {
+  try {
+    if (!window.ethereum) throw new Error("No se encontró una wallet. Instalá MetaMask.");
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    let net = await provider.getNetwork();
+    if (net.chainId !== SEPOLIA_CHAIN_ID) {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0xaa36a7" }] });
+    }
+    const p2 = new ethers.BrowserProvider(window.ethereum);   // proveedor nuevo tras cambiar de red
+    signer = await p2.getSigner();
+    account = await signer.getAddress();
+    $("walletInfo").textContent = "Conectado: " + account + " (Sepolia)";
+    show("msgConnect", "ok", "Wallet conectada a Sepolia.");
+  } catch (e) {
+    show("msgConnect", "bad", errText(e));
+  }
+}
+
+function requireWallet() {
+  if (!signer) throw new Error("Primero conectá tu wallet (paso 1).");
+}
+
+// ---- Verificar (lectura gratuita, no requiere wallet) ----
+async function verify() {
+  const btn = $("btnVerify"); btn.disabled = true;
+  try {
+    const hash = await getHash("verifyFile", "verifyHash");
+    const reader = signer ? signer.provider : new ethers.JsonRpcProvider(SEPOLIA_RPC);
+    const c = new ethers.Contract(getAddress(), ABI, reader);
+    const r = await c.verifyCertificate(hash);
+    if (!r.exists) {
+      show("msgVerify", "bad", "✗ No encontrado. Este documento no está registrado (o fue modificado).\nHash: " + hash);
+    } else if (!r.valid) {
+      show("msgVerify", "bad", "✗ Certificado REVOCADO.\nEmisor: " + r.issuer + "\nHash: " + hash);
+    } else {
+      const fecha = new Date(Number(r.issuedAt) * 1000).toLocaleString("es-AR");
+      show("msgVerify", "ok", "✓ Certificado VÁLIDO.\nEmisor: " + r.issuer + "\nTitular: " + r.recipient + "\nEmitido: " + fecha + "\nHash: " + hash);
+    }
+    $("msgVerify").style.whiteSpace = "pre-line";
+  } catch (e) {
+    show("msgVerify", "bad", errText(e));
+  } finally { btn.disabled = false; }
+}
+
+// ---- Emitir (escritura: transacción firmada con la wallet) ----
+async function issue() {
+  const btn = $("btnIssue"); btn.disabled = true;
+  try {
+    requireWallet();
+    const file = $("issueFile").files[0];
+    if (!file) throw new Error("Elegí el archivo del certificado.");
+    const recipient = $("issueRecipient").value.trim();
+    if (!ethers.isAddress(recipient)) throw new Error("Ingresá una dirección de titular válida.");
+    const hash = await hashFile(file);
+    const c = new ethers.Contract(getAddress(), ABI, signer);
+    show("msgIssue", "info", "Confirmá la transacción en tu wallet…");
+    const tx = await c.issueCertificate(hash, recipient, $("issueURI").value.trim());
+    show("msgIssue", "info", "Transacción enviada, esperando confirmación…\n" + tx.hash);
+    await tx.wait();
+    show("msgIssue", "ok", "✓ Certificado emitido.\nHash: " + hash + "\nTransacción: https://sepolia.etherscan.io/tx/" + tx.hash);
+    $("msgIssue").style.whiteSpace = "pre-line";
+  } catch (e) {
+    show("msgIssue", "bad", errText(e));
+  } finally { btn.disabled = false; }
+}
+
+// ---- Revocar ----
+async function revoke() {
+  const btn = $("btnRevoke"); btn.disabled = true;
+  try {
+    requireWallet();
+    const hash = await getHash("revokeFile", "revokeHash");
+    const c = new ethers.Contract(getAddress(), ABI, signer);
+    show("msgRevoke", "info", "Confirmá la transacción en tu wallet…");
+    const tx = await c.revokeCertificate(hash);
+    await tx.wait();
+    show("msgRevoke", "ok", "✓ Certificado revocado.\nTransacción: https://sepolia.etherscan.io/tx/" + tx.hash);
+    $("msgRevoke").style.whiteSpace = "pre-line";
+  } catch (e) {
+    show("msgRevoke", "bad", errText(e));
+  } finally { btn.disabled = false; }
+}
+
+// Muestra el hash apenas se elige el archivo a emitir
+$("issueFile").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0];
+  $("issueHash").textContent = f ? "Hash: " + (await hashFile(f)) : "Hash: (elegí un archivo)";
+});
+
+$("btnConnect").addEventListener("click", connect);
+$("btnVerify").addEventListener("click", verify);
+$("btnIssue").addEventListener("click", issue);
+$("btnRevoke").addEventListener("click", revoke);
+</script>
+</body>
+</html>
