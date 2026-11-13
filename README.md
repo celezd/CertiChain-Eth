@@ -4,6 +4,9 @@ Proyecto Final del curso Introducción a Ethereum y Solidity - ETH Kipu
 
 Integrantes: María Celeste Dominguez
 
+**Demo:** [Probar la aplicación](https://celezd.github.io/CertiChain-Eth/)
+Para verificar un certificado, subí el archivo `Certificado_de_prueba.pdf` (incluido en este repositorio) en el bloque "Verificar un certificado".
+
 ## ¿Qué problema resuelve?
 
 Verificar que un título o certificado es auténtico hoy depende de contactar a la institución emisora y confiar en su base de datos centralizada. CertiChain registra en Ethereum la **huella digital (hash)** de cada certificado, de modo que cualquiera pueda verificarlo en segundos, sin permisos y sin depender de un intermediario.
